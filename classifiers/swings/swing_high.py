@@ -47,6 +47,7 @@ class SwingHigh(Classifier):
         last_swing = None
 
         for i in range(len(data)):
+            detected_swing_this_bar = False
             if is_inside.iloc[i]:
                 continue
 
@@ -90,6 +91,7 @@ class SwingHigh(Classifier):
                 if not_engulfed_high and not_engulfed_low:
                     is_swing_high.iloc[i] = True
                     last_swing = 'high'
+                    detected_swing_this_bar = True
                     continue
 
             # UP bars
@@ -100,6 +102,7 @@ class SwingHigh(Classifier):
                         if last_swing is None or last_swing == 'low':
                             is_swing_high.iloc[i] = True
                             last_swing = 'high'
+                            detected_swing_this_bar = True
                 # UP → OUTSIDE: check what follows the outside bars
                 elif is_outside.iloc[right_idx]:
                     if right_dir_idx is not None:
@@ -109,6 +112,7 @@ class SwingHigh(Classifier):
                                 if last_swing is None or last_swing == 'low':
                                     is_swing_high.iloc[i] = True
                                     last_swing = 'high'
+                                    detected_swing_this_bar = True
                         # UP → OUTSIDE(s) → DOWN = High at last OUTSIDE
                         # (handled in OUTSIDE section below)
 
@@ -126,6 +130,7 @@ class SwingHigh(Classifier):
                         if last_swing is None or last_swing == 'low':
                             is_swing_high.iloc[i] = True
                             last_swing = 'high'
+                            detected_swing_this_bar = True
 
                 # DOWN → OUTSIDE → DOWN = High at OUTSIDE (if higher high than neighbors)
                 elif left_is_down and right_is_down:
@@ -133,9 +138,11 @@ class SwingHigh(Classifier):
                         if last_swing is None or last_swing == 'low':
                             is_swing_high.iloc[i] = True
                             last_swing = 'high'
+                            detected_swing_this_bar = True
 
             # Update state for swing LOW (needed for alternation)
-            if is_down.iloc[i] or is_outside.iloc[i]:
+            # Skip if we already detected a swing this bar
+            if not detected_swing_this_bar and (is_down.iloc[i] or is_outside.iloc[i]):
                 if highs.iloc[right_idx] > current_high:
                     if last_swing is None or last_swing == 'high':
                         last_swing = 'low'
