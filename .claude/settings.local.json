@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python tests/test_bar_classifiers_visual.py:*)",
+      "Bash(python:*)",
+      "Bash(git init:*)"
+    ]
+  }
+}
