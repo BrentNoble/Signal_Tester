@@ -50,12 +50,33 @@ class Dow123BearishBreakdown(Signal):
         signal = pd.Series(False, index=data.index)
 
         # Build list of swing points: (index, type, price)
+        # When both high and low occur on same bar (outside bar), order based on prior trend:
+        # - After uptrend (last swing was low): HIGH comes first, then LOW
+        # - After downtrend (last swing was high): LOW comes first, then HIGH
         swings = []
+        last_swing_type = None
         for i in range(len(data)):
-            if is_swing_low.iloc[i]:
+            is_low = is_swing_low.iloc[i]
+            is_high = is_swing_high.iloc[i]
+
+            if is_low and is_high:
+                # Both on same bar - order based on prior trend
+                if last_swing_type == "low":
+                    # Was in uptrend: high forms first (continuation), then low (reversal)
+                    swings.append((i, "high", highs.iloc[i]))
+                    swings.append((i, "low", lows.iloc[i]))
+                    last_swing_type = "low"
+                else:
+                    # Was in downtrend or unknown: low forms first, then high
+                    swings.append((i, "low", lows.iloc[i]))
+                    swings.append((i, "high", highs.iloc[i]))
+                    last_swing_type = "high"
+            elif is_low:
                 swings.append((i, "low", lows.iloc[i]))
-            if is_swing_high.iloc[i]:
+                last_swing_type = "low"
+            elif is_high:
                 swings.append((i, "high", highs.iloc[i]))
+                last_swing_type = "high"
 
         # Track active 1-2-3 patterns waiting for breakdown
         active_patterns = []
