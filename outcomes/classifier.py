@@ -616,6 +616,7 @@ class SignalStateTracker:
 
                 if trend_broken:
                     current_state = DowTrendState.TREND_END
+                    pending_state = DowTrendState.UNKNOWN  # Reset next bar before signal checks
                     broke_level = True
 
             elif current_state == DowTrendState.DOWNTREND:
@@ -643,10 +644,12 @@ class SignalStateTracker:
 
                 if trend_broken:
                     current_state = DowTrendState.TREND_END
+                    pending_state = DowTrendState.UNKNOWN  # Reset next bar before signal checks
                     broke_level = True
 
             elif current_state == DowTrendState.TREND_END:
-                # Stay in trend_end until next signal
+                # Fallback: if pending_state wasn't set, transition to UNKNOWN
+                # (This should not happen with proper pending_state handling above)
                 current_state = DowTrendState.UNKNOWN
 
             states.append({
