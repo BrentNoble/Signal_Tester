@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from data.loaders import fetch_stock_data, load_stock_data
-from signals.dow_breakout import BreakUpSignal, BreakDownSignal
+from signals.dow_breakout import Dow123BullishBreakout, Dow123BearishBreakdown
 from signals.another_method import AnotherUpSignal, AnotherDownSignal
 from analysis.probability import calculate_hit_rate, calculate_lift, calculate_expectancy
 from analysis.duration import calculate_trend_duration, calculate_max_favorable_excursion
@@ -44,8 +44,8 @@ def run_signal_analysis(
 
     # Define signals to analyze
     signals = [
-        BreakUpSignal(lookback=20),
-        BreakDownSignal(lookback=20),
+        Dow123BullishBreakout(),
+        Dow123BearishBreakdown(),
         AnotherUpSignal(),
         AnotherDownSignal(),
     ]
@@ -70,7 +70,7 @@ def run_signal_analysis(
         expectancy = calculate_expectancy(signal_series, returns, forward_periods)
 
         # Determine direction for duration analysis
-        direction = "up" if "Up" in signal.name else "down"
+        direction = "up" if "Bullish" in signal.name or "Up" in signal.name else "down"
         duration_stats = calculate_trend_duration(data, signal_series, direction)
         mfe_stats = calculate_max_favorable_excursion(
             data, signal_series, direction, max_periods=forward_periods

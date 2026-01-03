@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import pytest
 
-from signals.dow_breakout import BreakUpSignal, BreakDownSignal
+from signals.dow_breakout import Dow123BullishBreakout, Dow123BearishBreakdown
 
 
 @pytest.fixture
@@ -39,69 +39,53 @@ def sample_data():
     return df
 
 
-class TestBreakUpSignal:
-    """Tests for BreakUpSignal."""
-
-    def test_init_default_lookback(self):
-        signal = BreakUpSignal()
-        assert signal.lookback == 20
-
-    def test_init_custom_lookback(self):
-        signal = BreakUpSignal(lookback=10)
-        assert signal.lookback == 10
+class TestDow123BullishBreakout:
+    """Tests for Dow123BullishBreakout."""
 
     def test_generate_returns_series(self, sample_data):
-        signal = BreakUpSignal(lookback=10)
+        signal = Dow123BullishBreakout()
         result = signal.generate(sample_data)
 
         assert isinstance(result, pd.Series)
         assert len(result) == len(sample_data)
 
     def test_generate_returns_boolean(self, sample_data):
-        signal = BreakUpSignal(lookback=10)
+        signal = Dow123BullishBreakout()
         result = signal.generate(sample_data)
 
         assert result.dtype == bool
 
     def test_signal_name(self):
-        signal = BreakUpSignal()
-        assert signal.name == "DowBreakUp"
+        signal = Dow123BullishBreakout()
+        assert signal.name == "Dow123BullishBreakout"
 
     def test_validate_data_missing_columns(self):
-        signal = BreakUpSignal()
+        signal = Dow123BullishBreakout()
         bad_data = pd.DataFrame({"Close": [1, 2, 3]})
 
         with pytest.raises(ValueError, match="Missing required columns"):
             signal.validate_data(bad_data)
 
 
-class TestBreakDownSignal:
-    """Tests for BreakDownSignal."""
-
-    def test_init_default_lookback(self):
-        signal = BreakDownSignal()
-        assert signal.lookback == 20
-
-    def test_init_custom_lookback(self):
-        signal = BreakDownSignal(lookback=15)
-        assert signal.lookback == 15
+class TestDow123BearishBreakdown:
+    """Tests for Dow123BearishBreakdown."""
 
     def test_generate_returns_series(self, sample_data):
-        signal = BreakDownSignal(lookback=10)
+        signal = Dow123BearishBreakdown()
         result = signal.generate(sample_data)
 
         assert isinstance(result, pd.Series)
         assert len(result) == len(sample_data)
 
     def test_generate_returns_boolean(self, sample_data):
-        signal = BreakDownSignal(lookback=10)
+        signal = Dow123BearishBreakdown()
         result = signal.generate(sample_data)
 
         assert result.dtype == bool
 
     def test_signal_name(self):
-        signal = BreakDownSignal()
-        assert signal.name == "DowBreakDown"
+        signal = Dow123BearishBreakdown()
+        assert signal.name == "Dow123BearishBreakdown"
 
 
 class TestSignalIntegration:
@@ -109,8 +93,8 @@ class TestSignalIntegration:
 
     def test_up_and_down_signals_exclusive(self, sample_data):
         """Up and down signals should not fire on the same day."""
-        up_signal = BreakUpSignal(lookback=10)
-        down_signal = BreakDownSignal(lookback=10)
+        up_signal = Dow123BullishBreakout()
+        down_signal = Dow123BearishBreakdown()
 
         up_result = up_signal.generate(sample_data)
         down_result = down_signal.generate(sample_data)
