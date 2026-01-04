@@ -1,31 +1,35 @@
 # Signal Lab
 
-## What This Is
+## Purpose
 
-A statistical validation framework for **bullish** technical analysis signals. We measure whether signals provide useful information about future upward price movement.
-
-**Long-only.** We cannot short, so we only validate bullish entry signals.
+Statistical validation of entry signals for **dividend stock investing** with a **12-month minimum holding period** (Australian CGT discount).
 
 ## What This Is NOT
 
 **Do not add:**
-- P&L calculations
-- Position sizing
-- Equity curves
-- Drawdown analysis
-- Trade simulation
-- Portfolio management
-- Risk-adjusted returns
-- Sharpe ratios or any "strategy performance" metrics
-- Bearish/short signal validation
+- P&L calculations or equity curves
+- Position sizing or portfolio management
+- Trade simulation or backtesting engines
+- Sharpe ratios or risk-adjusted return metrics
+- Compounding or reinvestment logic
 
-If it belongs in a backtest engine, it doesn't belong here. We are validating signals as statistical predictors, not simulating trading strategies.
+We are validating whether signals provide useful information. We are not simulating a trading system.
 
-## Core Question
+## Core Questions
 
-> When a bullish signal fires, what is the probability that an uptrend develops, and how does this compare to random entry?
+> When an entry signal fires:
+> 1. What's the probability of positive return at 12 months?
+> 2. What's the typical return at 12 months?
+> 3. What's the peak gain within 12 months (MFE)?
+> 4. What's the worst drawdown within 12 months (MAE)?
+> 5. How does this compare to random entry?
 
-That's it. Everything else is scope creep.
+## Investment Context
+
+- **Asset class**: ASX dividend stocks
+- **Holding period**: 12+ months (CGT discount target)
+- **Entry**: Signal fires → buy
+- **Success criteria**: Positive return at 12 months
 
 ## Architecture
 
@@ -34,14 +38,51 @@ signal_lab/
 ├── classifiers/          # Primitives (bar types, swing points)
 │   ├── bars/             # Up, Down, Inside, Outside
 │   └── swings/           # SwingHigh, SwingLow
-├── signals/              # Pattern detection
-│   └── dow_breakout/     # Dow 1-2-3 bullish breakout
-├── outcomes/             # Outcome measurement
+├── signals/              # Entry signal detection
+│   └── dow_breakout/     # Dow 1-2-3 patterns
+├── outcomes/             # 12-month outcome measurement
 ├── analysis/             # Statistical aggregation
 ├── data/
 │   └── Test/             # Validated test data
 └── tests/
 ```
+
+## What We Measure
+
+### Per Signal Instance
+
+| Metric | Definition |
+|--------|------------|
+| `return_12m` | % return if held exactly 12 months |
+| `profitable_12m` | Was return positive at 12 months? (bool) |
+| `mfe_12m` | Max favourable excursion within 12 months (peak gain) |
+| `mfe_bar` | Bar index when peak occurred (0-51) |
+| `mae_12m` | Max adverse excursion within 12 months (worst drawdown) |
+| `exit_signal_fired` | Did an exit signal fire within 12 months? (bool) |
+| `exit_signal_bar` | Bar index when exit signal fired (if any) |
+| `return_at_exit` | % return if exited on exit signal |
+
+### Derived Comparisons
+
+| Metric | Definition |
+|--------|------------|
+| `left_on_table` | mfe_12m - return_12m (how much holding cost you) |
+| `exit_vs_hold` | return_at_exit - return_12m (was exit signal better?) |
+| `exit_vs_mfe` | return_at_exit - mfe_12m (how close to peak was exit?) |
+
+### Aggregated Statistics
+
+| Metric | Definition |
+|--------|------------|
+| `win_rate_12m` | % of signals profitable at 12 months |
+| `mean_return_12m` | Average 12-month return |
+| `median_return_12m` | Median 12-month return |
+| `mean_mfe_12m` | Average peak gain |
+| `mean_mae_12m` | Average worst drawdown |
+| `mean_left_on_table` | Average forgone gains from holding |
+| `exit_signal_useful_rate` | % where exit beat hold (return_at_exit > return_12m) |
+| `baseline_win_rate` | Win rate of random entry (control) |
+| `lift` | win_rate_12m / baseline_win_rate |
 
 ## Definitions
 
@@ -54,80 +95,109 @@ signal_lab/
 | Outside | High > prior high AND low < prior low |
 
 ### Swing Points
-- **Swing High**: Price reversed from up to down
-- **Swing Low**: Price reversed from down to up
+- **Swing High**: Trend reversed from up to down
+- **Swing Low**: Trend reversed from down to up
 - Swings alternate (High → Low → High → Low)
 - Inside bars are invisible to swing detection
 
-### Dow 1-2-3 Bullish Breakout
+---
+
+## Entry Signals
+
+### Signal 1: Bullish Breakout (Momentum)
+
+Buy when an emerging uptrend confirms via breakout.
+
+**Pattern:**
 1. Swing Low₁ forms
 2. Swing High forms (resistance)
-3. Swing Low₂ forms where Low₂ > Low₁ (higher low)
-4. Bar HIGH breaks above Swing High → **Signal fires**
+3. Swing Low₂ forms where Low₂ > Low₁ (higher low confirms trend)
+4. Bar HIGH breaks above Swing High → **ENTRY**
 
-### Uptrend (for outcome measurement)
-- **Uptrend continues**: Higher highs and higher lows maintained
-- **Uptrend breaks**: LOW < last swing low OR swing high forms lower than previous
-
-## What We Measure
-
-For each bullish signal instance:
-
-| Metric | Definition |
-|--------|------------|
-| `trend_developed` | Did a Dow-defined uptrend establish? (bool) |
-| `duration_bars` | Bars from signal to trend break |
-| `magnitude_pct` | % change from signal close to trend break close |
-| `mfe_pct` | Max favorable excursion (best possible exit) |
-| `mae_pct` | Max adverse excursion (worst drawdown during trend) |
-
-Aggregated across all signals:
-
-| Metric | Definition |
-|--------|------------|
-| `success_rate` | % of signals where uptrend developed |
-| `mean_duration` | Average bars in trend |
-| `mean_magnitude` | Average % gain |
-| `baseline_rate` | Success rate of random entry (control) |
-| `lift` | success_rate / baseline_rate |
-
-## Validation Data
-
-`data/Test/test_gann_34bars.csv` - 34 bars with manually verified:
-- Bar type classifications
-- Swing point locations
-
-`data/Test/test_signals_synthetic.csv` - Synthetic data covering:
-- Bullish breakout → uptrend → trend end
-
-Classifiers must achieve 100% accuracy on test data.
-
-## Running Tests
-
-```bash
-python tests/test_gann_data.py      # Classifier accuracy
-python tests/test_dow_signals.py    # Signal detection
 ```
+        /\  ← Swing High (resistance)
+       /  \
+      /    \    /
+     /      \  / ← Swing Low₂ (higher low)
+    /        \/
+   / 
+  / ← Swing Low₁
+ 
+  [1]    [2]   [3]        [4] ← Break above [2] = ENTRY
+```
+
+**Thesis:** Higher low indicates buyers stepping in at higher prices. Breakout above resistance confirms demand.
+
+---
+
+### Signal 2: Downtrend Reversal (Mean Reversion)
+
+Buy when a confirmed downtrend breaks.
+
+**Step 1 - Identify Downtrend via Bearish Breakdown:**
+1. Swing High₁ forms
+2. Swing Low forms (support)
+3. Swing High₂ forms where High₂ < High₁ (lower high confirms weakness)
+4. Bar LOW breaks below Swing Low → **Downtrend confirmed**
+
+```
+  \ ← Swing High₁
+   \
+    \  /\ ← Swing High₂ (lower high)
+     \/  \
+      ← Swing Low (support)
+          \
+           \ ← Break below support = DOWNTREND CONFIRMED
+```
+
+**Step 2 - Wait for Downtrend Break:**
+
+Once in confirmed downtrend, track swing points. Entry when:
+- Swing Low forms HIGHER than previous Swing Low (higher low), OR
+- Price breaks above the last Swing High
+
+```
+  Downtrend:        Reversal:
+  
+  \                      /
+   \  /\                / ← Break above last swing high = ENTRY
+    \/  \    /\        /
+         \  /  \      /
+          \/    \    /
+                 \  / ← Higher low = ENTRY
+                  \/
+```
+
+**Thesis:** Downtrend identifies beaten-down stock. Reversal signal indicates selling exhaustion and new buying interest.
+
+---
+
+## Data Requirements
+
+- **Timeframe**: Weekly bars (52 bars = 12 months)
+- **History needed**: Signal date + 52 weeks forward
+- **Test data**: `data/Test/` contains validated classifier tests
 
 ## Code Conventions
 
-- DataFrame columns: `Open`, `High`, `Low`, `Close` (capitalized)
+- DataFrame columns: `Open`, `High`, `Low`, `Close` (capitalised)
 - Classifiers return `pd.Series` of bool
 - Signals return `pd.Series` of bool
-- No lookahead in signal generation (outcomes can look forward)
+- 12 months = 52 weekly bars
 
 ## Status
 
-**Working:**
-- Bar classifiers (100% on Gann data)
-- Swing classifiers (100% on Gann data)
-- Dow 1-2-3 bullish signal detection
+### Working
+- Bar classifiers (100% accuracy on Gann test data)
+- Swing classifiers (100% accuracy on Gann test data)
+- Dow 1-2-3 Bullish Breakout signal (Signal 1)
+- Dow 1-2-3 Bearish Breakdown detection (for Signal 2 downtrend identification)
 
-**TODO:**
-- Outcome measurement module (uptrend tracking)
+### TODO
+- Downtrend Reversal signal (Signal 2 - entry on break)
+- Outcome measurement module (12-month metrics)
 - Baseline comparison (random entry)
 - Multi-stock aggregation
 
-**To Remove/Simplify:**
-- Bearish signal code (keep for swing detection, but don't validate)
+### To Remove
 - Markov transition complexity in `outcomes/classifier.py`
