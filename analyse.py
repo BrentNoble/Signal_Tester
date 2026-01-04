@@ -15,6 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 from signals.dow_breakout import Dow123BullishBreakout, Dow123BearishBreakdown, DowntrendReversal
+from signals.twelve_bar import TwelveBarBreakout
 from outcomes import OutcomeMeasurer, RandomBaseline
 
 
@@ -79,16 +80,19 @@ def analyse_stock(ticker: str, data: pd.DataFrame) -> dict:
     bullish = Dow123BullishBreakout()
     bearish = Dow123BearishBreakdown()
     reversal = DowntrendReversal()
+    twelve_bar = TwelveBarBreakout()
 
     # Generate signals
     bullish_signals = bullish.generate(data)
     bearish_signals = bearish.generate(data)
     reversal_signals = reversal.generate(data)
+    twelve_bar_signals = twelve_bar.generate(data)
 
     print(f"\nSignals detected:")
     print(f"  Bullish Breakout: {bullish_signals.sum()}")
     print(f"  Bearish Breakdown: {bearish_signals.sum()}")
     print(f"  Downtrend Reversal: {reversal_signals.sum()}")
+    print(f"  TwelveBar Breakout: {twelve_bar_signals.sum()}")
 
     # Measure outcomes
     measurer = OutcomeMeasurer()
@@ -101,6 +105,11 @@ def analyse_stock(ticker: str, data: pd.DataFrame) -> dict:
     # For reversal signals, bearish breakdown is also the exit signal
     reversal_outcomes = measurer.measure_all(
         data, reversal_signals, "downtrend_reversal", exit_signals=bearish_signals
+    )
+
+    # For twelve bar breakout signals, bearish breakdown is the exit signal
+    twelve_bar_outcomes = measurer.measure_all(
+        data, twelve_bar_signals, "twelve_bar_breakout", exit_signals=bearish_signals
     )
 
     # Calculate baseline
@@ -125,11 +134,16 @@ def analyse_stock(ticker: str, data: pd.DataFrame) -> dict:
             "summary": measurer.summarize(reversal_outcomes),
             "df": measurer.to_dataframe(reversal_outcomes),
         },
+        "twelve_bar_breakout": {
+            "outcomes": twelve_bar_outcomes,
+            "summary": measurer.summarize(twelve_bar_outcomes),
+            "df": measurer.to_dataframe(twelve_bar_outcomes),
+        },
         "baseline": baseline_stats,
     }
 
     # Print summaries
-    for signal_type in ["bullish_breakout", "downtrend_reversal"]:
+    for signal_type in ["bullish_breakout", "downtrend_reversal", "twelve_bar_breakout"]:
         summary = results[signal_type]["summary"]
         if summary:
             print(f"\n{signal_type.upper().replace('_', ' ')}:")
@@ -150,7 +164,7 @@ def analyse_stock(ticker: str, data: pd.DataFrame) -> dict:
         print(f"  Mean return (12m): {baseline_stats.get('baseline_mean_return', 0):.1f}%")
 
         # Calculate lift
-        for signal_type in ["bullish_breakout", "downtrend_reversal"]:
+        for signal_type in ["bullish_breakout", "downtrend_reversal", "twelve_bar_breakout"]:
             summary = results[signal_type]["summary"]
             if summary and summary.get("total_signals", 0) > 0:
                 signal_wr = summary.get("win_rate_12m", 0)
@@ -178,7 +192,7 @@ def export_to_excel(results: dict, output_dir: str = "results"):
         # Sheet 1: All signal instances
         all_signals = []
 
-        for signal_type in ["bullish_breakout", "downtrend_reversal"]:
+        for signal_type in ["bullish_breakout", "downtrend_reversal", "twelve_bar_breakout"]:
             df = results[signal_type]["df"]
             if len(df) > 0:
                 all_signals.append(df)
@@ -189,7 +203,7 @@ def export_to_excel(results: dict, output_dir: str = "results"):
 
         # Sheet 2: Summary
         summary_data = []
-        for signal_type in ["bullish_breakout", "downtrend_reversal"]:
+        for signal_type in ["bullish_breakout", "downtrend_reversal", "twelve_bar_breakout"]:
             summary = results[signal_type]["summary"]
             if summary:
                 row = {"signal_type": signal_type}
