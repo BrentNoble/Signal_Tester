@@ -29,7 +29,9 @@ We are validating whether signals provide useful information. We are not simulat
 - **Asset class**: ASX dividend stocks
 - **Holding period**: 12+ months (CGT discount target)
 - **Entry**: Signal fires → buy
-- **Success criteria**: Positive return at 12 months
+- **Income**: Dividends received during holding period
+- **Success criteria**: Positive total return (price + dividends) at 12 months
+- **Analysis level**: Per-stock first, then cross-stock comparison
 
 ## Architecture
 
@@ -120,9 +122,9 @@ Buy when an emerging uptrend confirms via breakout.
       /    \    /
      /      \  / ← Swing Low₂ (higher low)
     /        \/
-   / 
+   /
   / ← Swing Low₁
- 
+
   [1]    [2]   [3]        [4] ← Break above [2] = ENTRY
 ```
 
@@ -158,7 +160,7 @@ Once in confirmed downtrend, track swing points. Entry when:
 
 ```
   Downtrend:        Reversal:
-  
+
   \                      /
    \  /\                / ← Break above last swing high = ENTRY
     \/  \    /\        /
@@ -177,6 +179,126 @@ Once in confirmed downtrend, track swing points. Entry when:
 - **Timeframe**: Weekly bars (52 bars = 12 months)
 - **History needed**: Signal date + 52 weeks forward
 - **Test data**: `data/Test/` contains validated classifier tests
+
+## Stock Universe
+
+ASX 50 dividend payers with 10+ years history. Analyse per-stock (some may be too volatile).
+
+### Banks (Stable, Fully Franked)
+| Ticker | Name | Notes |
+|--------|------|-------|
+| CBA | Commonwealth Bank | Largest, most stable |
+| WBC | Westpac | Big 4 |
+| NAB | National Australia Bank | Big 4 |
+| ANZ | ANZ Banking Group | Big 4 |
+| MQG | Macquarie Group | Investment bank, more volatile |
+
+### Miners (Cyclical, High Yield)
+| Ticker | Name | Notes |
+|--------|------|-------|
+| BHP | BHP Group | Diversified, global |
+| RIO | Rio Tinto | Iron ore, aluminium |
+| FMG | Fortescue | Iron ore, high yield ~7% |
+| S32 | South32 | BHP spin-off |
+
+### Energy
+| Ticker | Name | Notes |
+|--------|------|-------|
+| WDS | Woodside Energy | Oil & gas |
+| STO | Santos | Oil & gas |
+| ORG | Origin Energy | Electricity + gas |
+
+### Retail / Consumer
+| Ticker | Name | Notes |
+|--------|------|-------|
+| WES | Wesfarmers | Bunnings, Kmart, Officeworks |
+| WOW | Woolworths | Supermarkets |
+| COL | Coles | Supermarkets (spun off 2018) |
+
+### Telco / Infrastructure
+| Ticker | Name | Notes |
+|--------|------|-------|
+| TLS | Telstra | Stable, low growth |
+| TCL | Transurban | Toll roads |
+
+### Insurance / Financials
+| Ticker | Name | Notes |
+|--------|------|-------|
+| SUN | Suncorp | Insurance + banking |
+| QBE | QBE Insurance | Global insurer |
+| IAG | Insurance Australia Group | General insurance |
+
+### Healthcare
+| Ticker | Name | Notes |
+|--------|------|-------|
+| CSL | CSL Limited | Biotech, lower yield but growth |
+| SHL | Sonic Healthcare | Pathology |
+| RMD | ResMed | Sleep apnea devices |
+
+### REITs (Property)
+| Ticker | Name | Notes |
+|--------|------|-------|
+| GMG | Goodman Group | Industrial/logistics |
+| SCG | Scentre Group | Westfield malls |
+| GPT | GPT Group | Diversified property |
+
+### Industrials
+| Ticker | Name | Notes |
+|--------|------|-------|
+| BXB | Brambles | Pallets, global logistics |
+| AMC | Amcor | Packaging |
+
+**Start with**: CBA, BHP, WES, TLS, FMG (mix of sectors, varying volatility)
+
+## Output Structure
+
+Analysis is **per stock**. No cross-stock aggregation - each stock is its own validation.
+
+### Per Stock: `results/{TICKER}.xlsx`
+
+**Sheet 1: Signal Instances** (one row per signal fired)
+| Column | Description |
+|--------|-------------|
+| `signal_type` | "bullish_breakout" or "downtrend_reversal" |
+| `signal_date` | Date signal fired |
+| `entry_price` | Close on signal bar |
+| `return_12m` | % return at 12 months |
+| `profitable_12m` | True/False |
+| `mfe_12m` | Peak gain % within 12 months |
+| `mfe_bar` | Week when peak occurred (0-51) |
+| `mae_12m` | Max drawdown % within 12 months |
+| `exit_signal_fired` | Did exit signal fire? (bool) |
+| `exit_signal_bar` | Week when exit fired (if any) |
+| `return_at_exit` | % return if exited on signal |
+| `left_on_table` | mfe_12m - return_12m |
+| `exit_vs_hold` | return_at_exit - return_12m |
+
+**Sheet 2: Summary**
+| Metric | Bullish Breakout | Downtrend Reversal | Random Baseline |
+|--------|------------------|-------------------|-----------------|
+| Total signals | | | |
+| Win rate 12m | | | |
+| Mean return 12m | | | |
+| Mean MFE | | | |
+| Mean left on table | | | |
+| Exit useful % | | | |
+| Lift vs baseline | | | |
+
+### Verification Charts (optional)
+`charts/{TICKER}/signal_{N}.png` - one chart per signal instance showing:
+- Price bars for 52 weeks from signal
+- Entry point marked
+- MFE point marked
+- Exit signal marked (if fired)
+- 12-month endpoint marked
+
+Can be disabled for production runs.
+
+### Usage
+```bash
+python analyse.py --stock CBA
+python analyse.py --stock FMG --no-charts
+```
 
 ## Code Conventions
 
@@ -200,4 +322,6 @@ Once in confirmed downtrend, track swing points. Entry when:
 - Multi-stock aggregation
 
 ### To Remove
+- `trading/` module (traditional backtest cruft)
 - Markov transition complexity in `outcomes/classifier.py`
+- Any P&L or position sizing logic
