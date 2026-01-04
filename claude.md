@@ -313,15 +313,13 @@ python analyse.py --stock FMG --no-charts
 - Bar classifiers (100% accuracy on Gann test data)
 - Swing classifiers (100% accuracy on Gann test data)
 - Dow 1-2-3 Bullish Breakout signal (Signal 1)
-- Dow 1-2-3 Bearish Breakdown detection (for Signal 2 downtrend identification)
+- Dow 1-2-3 Bearish Breakdown detection (for exit signals)
+- Downtrend Reversal signal (Signal 2)
+- Outcome measurement module (12-month metrics, MFE, MAE, exit signal tracking)
+- Baseline comparison (random entry)
+- CLI tool: `python analyse.py --stock TICKER`
 
 ### TODO
-- Downtrend Reversal signal (Signal 2 - entry on break)
-- Outcome measurement module (12-month metrics)
-- Baseline comparison (random entry)
-- Multi-stock aggregation
-
-### To Remove
-- `trading/` module (traditional backtest cruft)
-- Markov transition complexity in `outcomes/classifier.py`
-- Any P&L or position sizing logic
+- Obtain weekly OHLC data for target stocks
+- Verification charts per signal instance
+- Multi-stock comparison report
