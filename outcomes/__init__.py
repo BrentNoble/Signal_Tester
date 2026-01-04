@@ -1,5 +1,13 @@
-"""Signal state transition tracking for Markov model analysis."""
+"""Outcome measurement for signal validation."""
 
-from .classifier import SignalStateTracker, Transition, DowTrendState
+from .classifier import DowTrendState, DowTrendTracker
+from .measurement import SignalOutcome, OutcomeMeasurer
+from .baseline import RandomBaseline
 
-__all__ = ["SignalStateTracker", "Transition", "DowTrendState"]
+__all__ = [
+    "DowTrendState",
+    "DowTrendTracker",
+    "SignalOutcome",
+    "OutcomeMeasurer",
+    "RandomBaseline"
+]

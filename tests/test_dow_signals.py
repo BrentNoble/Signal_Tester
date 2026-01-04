@@ -2,18 +2,22 @@
 
 import pandas as pd
 import sys
-sys.path.insert(0, "e:\\Signal analysis\\signal_lab")
+import os
+
+# Get the project root directory
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
 from signals.dow_breakout.up import Dow123BullishBreakout
 from signals.dow_breakout.down import Dow123BearishBreakdown
+from signals.dow_breakout.reversal import DowntrendReversal
 from classifiers.swings.swing_high import SwingHigh
 from classifiers.swings.swing_low import SwingLow
-from outcomes.classifier import SignalStateTracker
 
 
 def load_gann_data():
     """Load and prepare the Gann test data."""
-    df = pd.read_csv("e:\\Signal analysis\\signal_lab\\data\\Test\\test_gann_34bars.csv")
+    df = pd.read_csv(os.path.join(PROJECT_ROOT, "data", "Test", "test_gann_34bars.csv"))
 
     # Capitalize columns for consistency
     df.columns = [c.capitalize() for c in df.columns]
@@ -24,7 +28,7 @@ def load_gann_data():
 
 def load_synthetic_data():
     """Load synthetic test data with multiple signal patterns."""
-    df = pd.read_csv("e:\\Signal analysis\\signal_lab\\data\\Test\\test_signals_synthetic.csv")
+    df = pd.read_csv(os.path.join(PROJECT_ROOT, "data", "Test", "test_signals_synthetic.csv"))
 
     # Capitalize columns for consistency
     df.columns = [c.capitalize() for c in df.columns]
@@ -100,62 +104,37 @@ def test_bearish_breakdown():
     return breakdown
 
 
-def test_state_transitions():
-    """Test signal state transitions (Markov model)."""
-    df = load_gann_data()
+def test_downtrend_reversal():
+    """Test the downtrend reversal signal on synthetic data."""
+    df = load_synthetic_data()
 
-    # Create tracker with all Dow signals
-    signals = {
-        "Dow123BullishBreakout": Dow123BullishBreakout(),
-        "Dow123BearishBreakdown": Dow123BearishBreakdown(),
-    }
-    tracker = SignalStateTracker(signals)
+    # Generate signals
+    reversal = DowntrendReversal()
+    signals = reversal.generate(df)
 
-    # Show individual transitions
     print("\n" + "=" * 60)
-    print("SIGNAL STATE TRANSITIONS:")
+    print("DOWNTREND REVERSAL SIGNALS:")
     print("=" * 60)
 
-    transitions_df = tracker.get_transitions_df(df)
-    if len(transitions_df) > 0:
-        print("\nTransition events:")
-        for _, row in transitions_df.iterrows():
-            print(f"  Bar {row['from_idx']} ({row['from_signal']})")
-            print(f"    via [{row['intermediate_state']}]")
-            print(f"    → Bar {row['to_idx']} ({row['to_signal']})")
-            print(f"    % change: {row['pct_change']*100:.2f}%, bars: {row['bars_between']}")
+    signals_found = signals.sum()
+    if signals_found > 0:
+        for i in range(len(df)):
+            if signals.iloc[i]:
+                print(f"Bar {i}: {df['Date'].iloc[i]} - REVERSAL ENTRY")
+                print(f"   Close: {df['Close'].iloc[i]}")
     else:
-        print("No transitions found (need at least 2 signals)")
+        print("No downtrend reversal signals found in this data")
 
-    # Print transition matrix
-    tracker.print_transition_matrix(df)
-
-
-def test_state_visualization():
-    """Test the state visualization chart."""
-    df = load_gann_data()
-
-    # Create tracker with all Dow signals
-    signals = {
-        "Dow123BullishBreakout": Dow123BullishBreakout(),
-        "Dow123BearishBreakdown": Dow123BearishBreakdown(),
-    }
-    tracker = SignalStateTracker(signals)
-
-    # Plot states
-    tracker.plot_states(
-        df,
-        save_path="e:\\Signal analysis\\signal_lab\\tests\\state_chart.png",
-        show=True
-    )
+    print(f"\nTotal reversal signals: {signals_found}")
+    return signals
 
 
-def test_synthetic_data():
-    """Test signals and transitions on synthetic data with multiple patterns."""
+def test_all_signals():
+    """Test all signals on synthetic data."""
     df = load_synthetic_data()
 
     print("\n" + "=" * 70)
-    print("TESTING WITH SYNTHETIC DATA (75 bars)")
+    print("TESTING ALL SIGNALS WITH SYNTHETIC DATA")
     print("=" * 70)
 
     # Get swing points
@@ -174,47 +153,26 @@ def test_synthetic_data():
                 swing_type.append(f"HIGH @ {df['High'].iloc[i]}")
             print(f"  Bar {i}: {df['Date'].iloc[i]} - {', '.join(swing_type)}")
 
-    # Create tracker with all Dow signals
+    # Create all signals
     signals = {
         "Dow123BullishBreakout": Dow123BullishBreakout(),
         "Dow123BearishBreakdown": Dow123BearishBreakdown(),
+        "DowntrendReversal": DowntrendReversal(),
     }
-    tracker = SignalStateTracker(signals)
-
-    # Generate signals
-    signals_df = tracker.generate_all_signals(df)
 
     print("\nSIGNALS DETECTED:")
-    for name in signals.keys():
-        count = signals_df[name].sum()
+    for name, signal in signals.items():
+        result = signal.generate(df)
+        count = result.sum()
         print(f"  {name}: {count} signals")
         for i in range(len(df)):
-            if signals_df[name].iloc[i]:
+            if result.iloc[i]:
                 print(f"    Bar {i}: {df['Date'].iloc[i]} @ {df['Close'].iloc[i]}")
-
-    # Show transitions
-    print("\nTRANSITIONS:")
-    transitions_df = tracker.get_transitions_df(df)
-    if len(transitions_df) > 0:
-        for _, row in transitions_df.iterrows():
-            print(f"  {row['from_signal']}")
-            print(f"    via [{row['intermediate_state']}] ({row['pct_change']*100:+.2f}%)")
-            print(f"    -> {row['to_signal']}")
-            print()
-    else:
-        print("  No transitions found")
-
-    # Print transition matrix
-    tracker.print_transition_matrix(df)
-
-    # Plot with signal markers
-    tracker.plot_states(
-        df,
-        save_path="e:\\Signal analysis\\signal_lab\\tests\\synthetic_signals_chart.png",
-        show=True
-    )
 
 
 if __name__ == "__main__":
-    # Test with synthetic data that has expected values
-    test_synthetic_data()
+    test_bullish_breakout()
+    test_bearish_breakdown()
+    test_downtrend_reversal()
+    print("\n" + "=" * 70)
+    test_all_signals()
