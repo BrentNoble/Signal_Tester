@@ -11,7 +11,7 @@ class TwelveBarBreakout(Signal):
     Twelve Bar Consolidation Breakout Signal.
 
     Pattern:
-    1. Valid swing low forms (no prior swing low is lower) - this is Bar 0
+    1. Valid swing low forms (previous swing low is not lower) - this is Bar 0
     2. Track highest HIGH in bars 0-11 (12-bar window) as resistance
     3. Signal fires on first bar (12+) where HIGH > resistance
 
@@ -51,16 +51,16 @@ class TwelveBarBreakout(Signal):
             if is_swing_low.iloc[i]:
                 swing_lows.append((i, lows.iloc[i]))
 
-        # Identify valid anchors (no prior swing low is lower)
+        # Identify valid anchors (previous swing low is not lower)
         valid_anchors = []  # List of (index, price)
         for idx, (swing_idx, swing_price) in enumerate(swing_lows):
             is_valid = True
-            # Check all prior swing lows
-            for prior_idx, prior_price in swing_lows[:idx]:
+            # Check only the immediately preceding swing low
+            if idx > 0:
+                prior_idx, prior_price = swing_lows[idx - 1]
                 if prior_price < swing_price:
-                    # A prior swing low is lower - not valid anchor
+                    # Previous swing low is lower (this is a "higher low") - not valid anchor
                     is_valid = False
-                    break
             if is_valid:
                 valid_anchors.append((swing_idx, swing_price))
 
