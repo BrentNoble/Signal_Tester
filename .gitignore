@@ -26,6 +26,3 @@ Thumbs.db
 
 # Stock data (keep test data in data/Test/)
 data/*.csv
-
-# Generated results
-results/
