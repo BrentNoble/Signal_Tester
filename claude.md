@@ -320,6 +320,5 @@ python analyse.py --stock FMG --no-charts
 - CLI tool: `python analyse.py --stock TICKER`
 
 ### TODO
-- Obtain weekly OHLC data for target stocks
-- Verification charts per signal instance
+- Obtain weekly OHLC data for target stocks (CBA, BHP, WES, TLS)
 - Multi-stock comparison report
