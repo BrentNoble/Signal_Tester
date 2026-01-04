@@ -4,7 +4,6 @@ Signal validation analysis for ASX dividend stocks.
 
 Usage:
     python analyse.py --stock CBA
-    python analyse.py --stock FMG --no-charts
     python analyse.py --stock BHP --data path/to/BHP_weekly.csv
 """
 
@@ -60,14 +59,13 @@ def load_stock_data(ticker: str, data_path: str = None) -> pd.DataFrame:
     return df
 
 
-def analyse_stock(ticker: str, data: pd.DataFrame, generate_charts: bool = True) -> dict:
+def analyse_stock(ticker: str, data: pd.DataFrame) -> dict:
     """
     Run full signal validation analysis on a stock.
 
     Args:
         ticker: Stock ticker
         data: DataFrame with OHLC data
-        generate_charts: Whether to generate verification charts
 
     Returns:
         Dict with analysis results
@@ -225,11 +223,6 @@ def main():
         help="Path to weekly OHLC CSV file (default: data/{TICKER}_weekly.csv)"
     )
     parser.add_argument(
-        "--no-charts",
-        action="store_true",
-        help="Skip chart generation"
-    )
-    parser.add_argument(
         "--output", "-o",
         default="results",
         help="Output directory for Excel files (default: results)"
@@ -242,11 +235,7 @@ def main():
         data = load_stock_data(args.stock, args.data)
 
         # Run analysis
-        results = analyse_stock(
-            args.stock,
-            data,
-            generate_charts=not args.no_charts
-        )
+        results = analyse_stock(args.stock, data)
 
         # Export results
         export_to_excel(results, args.output)
