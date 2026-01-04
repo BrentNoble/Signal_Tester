@@ -11,7 +11,9 @@ class TwelveBarBreakout(Signal):
     Twelve Bar Consolidation Breakout Signal.
 
     Pattern:
-    1. Valid swing low forms (previous swing low is not lower) - this is Bar 0
+    1. Valid swing low forms - this is Bar 0. Valid means: previous swing low
+       is NOT lower than current (i.e., current is at or below prior).
+       This filters out "higher lows" which indicate mid-uptrend continuation.
     2. Track highest HIGH in bars 0-11 (12-bar window) as resistance
     3. Signal fires on first bar (12+) where HIGH > resistance
 

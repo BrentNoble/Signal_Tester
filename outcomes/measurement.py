@@ -200,7 +200,10 @@ class OutcomeMeasurer:
 
         # Find all signal bars
         signal_bars = signals[signals].index
-        if isinstance(signal_bars[0], int) if len(signal_bars) > 0 else True:
+        if len(signal_bars) == 0:
+            return outcomes
+
+        if isinstance(signal_bars[0], int):
             # Integer index
             for bar in signal_bars:
                 outcome = self.measure_single(data, bar, signal_type, exit_signals)

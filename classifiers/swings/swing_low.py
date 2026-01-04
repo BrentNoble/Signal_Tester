@@ -70,16 +70,16 @@ class SwingLow(Classifier):
             current_high = highs.iloc[i]
             current_low = lows.iloc[i]
 
-            # Find first directional (non-outside, non-inside) bars
+            # Find first directional (UP or DOWN) bars
             left_dir_idx = None
             for j in range(i - 1, -1, -1):
-                if not is_inside.iloc[j] and not is_outside.iloc[j]:
+                if is_up.iloc[j] or is_down.iloc[j]:
                     left_dir_idx = j
                     break
 
             right_dir_idx = None
             for j in range(i + 1, len(data)):
-                if not is_inside.iloc[j] and not is_outside.iloc[j]:
+                if is_up.iloc[j] or is_down.iloc[j]:
                     right_dir_idx = j
                     break
 
