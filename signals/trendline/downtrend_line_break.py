@@ -55,6 +55,7 @@ class DowntrendLineBreak(Signal):
         break_threshold_pct: float = 2.0,
         track_acceleration: bool = False,
         turning_point_lookback: int = 52,
+        debug: bool = False,
     ):
         """
         Initialize the signal.
@@ -65,16 +66,23 @@ class DowntrendLineBreak(Signal):
             break_threshold_pct: Penetration required to trigger break signal.
             track_acceleration: Pivot to steeper lines on acceleration (Golden Rule 5).
             turning_point_lookback: Max bars to look back for turning point (default 52 = 1 year).
+            debug: Print diagnostic messages during signal generation.
         """
         self._tolerance_pct = tolerance_pct
         self._min_peaks = min_peaks
         self._break_threshold_pct = break_threshold_pct
         self._track_acceleration = track_acceleration
         self._turning_point_lookback = turning_point_lookback
+        self._debug = debug
 
         # Dependencies
         self._bearish_breakdown = Dow123BearishBreakdown()
         self._swing_high = SwingHigh()
+
+    def _debug_log(self, bar: int, msg: str):
+        """Print debug message if debug mode enabled."""
+        if self._debug:
+            print(f"  [Bar {bar}] {msg}")
 
     def generate(self, data: pd.DataFrame) -> pd.Series:
         """
@@ -102,10 +110,10 @@ class DowntrendLineBreak(Signal):
         turning_point: Optional[Tuple[int, float]] = None  # Original highest high
         peaks: List[Tuple[int, float]] = []
         current_line: Optional[TrendLine] = None
-        last_steepen_bar: int = -1  # Track when line was last steepened
+        just_steepened: bool = False  # Skip acceleration check on steepen bar
 
-        # Track highest high seen before downtrend confirmation
-        # (needed to find turning point)
+        # Track swing highs for finding turning point
+        # Pruned periodically to prevent unbounded memory growth
         recent_swing_highs: List[Tuple[int, float]] = []
 
         for i in range(len(data)):
@@ -113,19 +121,30 @@ class DowntrendLineBreak(Signal):
             if is_swing_high.iloc[i]:
                 recent_swing_highs.append((i, highs.iloc[i]))
 
+            # Prune old swing highs outside lookback window to prevent memory growth
+            cutoff = i - self._turning_point_lookback - 1
+            if cutoff > 0 and recent_swing_highs and recent_swing_highs[0][0] < cutoff:
+                recent_swing_highs = [
+                    (idx, price) for idx, price in recent_swing_highs
+                    if idx >= cutoff
+                ]
+
             # === STATE: WAITING_FOR_DOWNTREND ===
             if state == TrendlineState.WAITING_FOR_DOWNTREND:
                 if bearish_signals.iloc[i]:
+                    self._debug_log(i, "Bearish breakdown detected")
                     # Find turning point: highest swing high within lookback before this bar
                     turning_point = self._find_turning_point(
                         recent_swing_highs, i, self._turning_point_lookback
                     )
 
                     if turning_point is not None:
+                        self._debug_log(
+                            i, f"Turning point: bar {turning_point[0]} @ {turning_point[1]}"
+                        )
                         state = TrendlineState.COLLECTING_PEAKS
                         peaks = [turning_point]
                         current_line = None
-                        # Keep collecting swing highs from now
 
             # === STATE: COLLECTING_PEAKS ===
             elif state == TrendlineState.COLLECTING_PEAKS:
@@ -135,6 +154,7 @@ class DowntrendLineBreak(Signal):
                     # Must be lower than previous peak
                     if peak_price < peaks[-1][1]:
                         peaks.append((i, peak_price))
+                        self._debug_log(i, f"Added peak {len(peaks)} @ {peak_price}")
 
                         # Try to form valid line with enough peaks
                         if len(peaks) >= self._min_peaks:
@@ -151,16 +171,13 @@ class DowntrendLineBreak(Signal):
                                 ):
                                     current_line = candidate
                                     state = TrendlineState.WATCHING_FOR_BREAK
-                                    # Check if current bar already breaks the new line
-                                    if current_line.is_break_above(
-                                        i, highs.iloc[i], self._break_threshold_pct
-                                    ):
-                                        signal.iloc[i] = True
-                                        state = TrendlineState.WAITING_FOR_DOWNTREND
-                                        turning_point = None
-                                        peaks = []
-                                        current_line = None
-                                        continue
+                                    self._debug_log(
+                                        i,
+                                        f"Line formed: slope={current_line.slope:.4f}"
+                                    )
+                                    # Note: No break check needed here - bar i is a peak
+                                    # that defines the line endpoint, so it cannot break
+                                    # above the line. Break detection starts next bar.
                     # else: Higher high - just skip adding this peak
                     # Only invalidate if it breaks above turning point (checked below)
 
@@ -173,6 +190,8 @@ class DowntrendLineBreak(Signal):
 
             # === STATE: WATCHING_FOR_BREAK ===
             elif state == TrendlineState.WATCHING_FOR_BREAK:
+                just_steepened = False  # Reset at start of each bar
+
                 if current_line is None:
                     # Shouldn't happen, but be defensive
                     state = TrendlineState.WAITING_FOR_DOWNTREND
@@ -194,17 +213,20 @@ class DowntrendLineBreak(Signal):
 
                     if is_first_break:
                         signal.iloc[i] = True
+                        line_price = current_line.price_at_bar(i)
+                        self._debug_log(
+                            i,
+                            f"SIGNAL! HIGH={highs.iloc[i]:.2f} > "
+                            f"line={line_price:.2f} + {self._break_threshold_pct}%"
+                        )
                         # Reset to look for next pattern
                         # TODO: Golden Rule 4 says on false break + continuation,
                         # redraw from original turning point. Current implementation
                         # resets fully - a new Dow123BearishBreakdown would be needed.
-                        # Future enhancement: track last_turning_point and resume
-                        # pattern if price returns below line within N bars.
                         state = TrendlineState.WAITING_FOR_DOWNTREND
                         turning_point = None
                         peaks = []
                         current_line = None
-                        last_steepen_bar = -1
                         continue
 
                 # Handle new swing high (potential peak for steepening)
@@ -225,18 +247,17 @@ class DowntrendLineBreak(Signal):
                             ):
                                 peaks.append((i, peak_price))
                                 current_line = steeper
-                                last_steepen_bar = i
+                                just_steepened = True
+                                self._debug_log(
+                                    i,
+                                    f"Steepened line: new slope={steeper.slope:.4f}"
+                                )
                                 # Skip remaining checks for this bar - new line is at peak
                                 continue
 
                 # Handle acceleration (Golden Rule 5)
-                # Skip acceleration after steepening - we need a new peak to pivot from
-                # Only check if we haven't steepened, or we have a new peak since steepening
-                has_new_peak_since_steepen = (
-                    last_steepen_bar < 0 or
-                    any(bar > last_steepen_bar for bar, _ in peaks[1:])
-                )
-                if self._track_acceleration and has_new_peak_since_steepen:
+                # Skip acceleration on bar where we just steepened
+                if self._track_acceleration and not just_steepened:
                     if current_line.is_break_below(
                         i, lows.iloc[i], self._break_threshold_pct
                     ):
