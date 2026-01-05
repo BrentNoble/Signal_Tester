@@ -140,12 +140,18 @@ class DowntrendLineBreak(Signal):
                                 ):
                                     current_line = candidate
                                     state = TrendlineState.WATCHING_FOR_BREAK
-                    else:
-                        # Higher high breaks downtrend structure - invalidate
-                        state = TrendlineState.WAITING_FOR_DOWNTREND
-                        turning_point = None
-                        peaks = []
-                        current_line = None
+                                    # Check if current bar already breaks the new line
+                                    if current_line.is_break_above(
+                                        i, highs.iloc[i], self._break_threshold_pct
+                                    ):
+                                        signal.iloc[i] = True
+                                        state = TrendlineState.WAITING_FOR_DOWNTREND
+                                        turning_point = None
+                                        peaks = []
+                                        current_line = None
+                                        continue
+                    # else: Higher high - just skip adding this peak
+                    # Only invalidate if it breaks above turning point (checked below)
 
                 # Check for price breaking above turning point (invalidation)
                 if turning_point is not None and highs.iloc[i] > turning_point[1]:
@@ -218,10 +224,11 @@ class DowntrendLineBreak(Signal):
                     if current_line.is_break_below(
                         i, lows.iloc[i], self._break_threshold_pct
                     ):
-                        # Price accelerating away - pivot to steeper line
-                        # Start collecting from last peak
+                        # Price accelerating away - pivot to steeper line.
+                        # NOTE: This sets last_peak as new turning point, which means
+                        # the invalidation threshold changes. This is intentional -
+                        # we're now tracking a steeper downtrend segment.
                         if len(peaks) >= 2:
-                            # Keep last peak as new starting point
                             last_peak = peaks[-1]
                             turning_point = last_peak
                             peaks = [last_peak]
