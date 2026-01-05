@@ -178,6 +178,17 @@ class DowntrendLineBreak(Signal):
                                     # Note: No break check needed here - bar i is a peak
                                     # that defines the line endpoint, so it cannot break
                                     # above the line. Break detection starts next bar.
+                                else:
+                                    # Bar validation failed - a bar between peaks
+                                    # penetrated too much. Adding more peaks won't
+                                    # fix this, so invalidate the pattern.
+                                    self._debug_log(
+                                        i, "Line validation failed - bar penetrated too much"
+                                    )
+                                    state = TrendlineState.WAITING_FOR_DOWNTREND
+                                    turning_point = None
+                                    peaks = []
+                                    current_line = None
                     # else: Higher high - just skip adding this peak
                     # Only invalidate if it breaks above turning point (checked below)
 
