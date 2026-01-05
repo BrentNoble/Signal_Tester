@@ -29,14 +29,20 @@ class DowntrendLineBreak(Signal):
 
     Golden Rules implemented:
     1. Require confirmed downtrend (via Dow123BearishBreakdown) before applying trendline
-    2. Need 3 peaks; draw from highest high (turning point)
-    3. All peaks AND bars must be within 2% of line
-    4. Cannot flatten line; on false break + continuation, redraw from original turning point
-    5. Always use steepest valid line; pivot on acceleration
+    2. Need 3 peaks; draw from highest high within lookback window (turning point)
+    3. All peaks AND bars must be within 2% of line during formation
+    4. Cannot flatten line (steepening only); false break handling is TODO
+    5. Always use steepest valid line; acceleration pivot disabled by default
 
     Signal fires when:
     - Bar HIGH exceeds the projected trendline price by more than break_threshold_pct
     - Previous bar HIGH was NOT a break (first-bar rule)
+
+    Known limitations:
+    - False break recovery (Rule 4): After signal fires, pattern resets fully.
+      Future enhancement would track original turning point for resumption.
+    - Acceleration pivot (Rule 5): Disabled by default (track_acceleration=False)
+      as it can trigger false resets when price accelerates away from line.
     """
 
     name = "DowntrendLineBreak"
@@ -48,6 +54,7 @@ class DowntrendLineBreak(Signal):
         min_peaks: int = 3,
         break_threshold_pct: float = 2.0,
         track_acceleration: bool = False,
+        turning_point_lookback: int = 52,
     ):
         """
         Initialize the signal.
@@ -57,11 +64,13 @@ class DowntrendLineBreak(Signal):
             min_peaks: Minimum peaks required for valid line (Golden Rule 2).
             break_threshold_pct: Penetration required to trigger break signal.
             track_acceleration: Pivot to steeper lines on acceleration (Golden Rule 5).
+            turning_point_lookback: Max bars to look back for turning point (default 52 = 1 year).
         """
         self._tolerance_pct = tolerance_pct
         self._min_peaks = min_peaks
         self._break_threshold_pct = break_threshold_pct
         self._track_acceleration = track_acceleration
+        self._turning_point_lookback = turning_point_lookback
 
         # Dependencies
         self._bearish_breakdown = Dow123BearishBreakdown()
@@ -107,8 +116,10 @@ class DowntrendLineBreak(Signal):
             # === STATE: WAITING_FOR_DOWNTREND ===
             if state == TrendlineState.WAITING_FOR_DOWNTREND:
                 if bearish_signals.iloc[i]:
-                    # Find turning point: highest swing high before this bar
-                    turning_point = self._find_turning_point(recent_swing_highs, i)
+                    # Find turning point: highest swing high within lookback before this bar
+                    turning_point = self._find_turning_point(
+                        recent_swing_highs, i, self._turning_point_lookback
+                    )
 
                     if turning_point is not None:
                         state = TrendlineState.COLLECTING_PEAKS
@@ -184,6 +195,11 @@ class DowntrendLineBreak(Signal):
                     if is_first_break:
                         signal.iloc[i] = True
                         # Reset to look for next pattern
+                        # TODO: Golden Rule 4 says on false break + continuation,
+                        # redraw from original turning point. Current implementation
+                        # resets fully - a new Dow123BearishBreakdown would be needed.
+                        # Future enhancement: track last_turning_point and resume
+                        # pattern if price returns below line within N bars.
                         state = TrendlineState.WAITING_FOR_DOWNTREND
                         turning_point = None
                         peaks = []
@@ -235,17 +251,15 @@ class DowntrendLineBreak(Signal):
                             current_line = None
                             state = TrendlineState.COLLECTING_PEAKS
 
-                # Validate current bar within tolerance
-                if current_line is not None:
-                    line_price = current_line.price_at_bar(i)
-                    if highs.iloc[i] > line_price:
-                        deviation = (highs.iloc[i] - line_price) / line_price * 100
-                        if deviation > self._tolerance_pct:
-                            # Bar breaks tolerance but not threshold
-                            # This is a minor penetration - line may still be valid
-                            # but we should re-validate on subsequent bars
-                            # For now, if it's not a signal break, check if trend continues
-                            pass
+                # Check bar tolerance (Golden Rule 3)
+                # If a bar penetrates between tolerance_pct and break_threshold_pct,
+                # it's in a gray zone - not a valid break but exceeds strict tolerance.
+                # We allow minor penetrations since the line was validated at formation.
+                # The pattern only ends on: true break (> break_threshold_pct) or
+                # price exceeding turning point (checked below).
+                #
+                # Note: If tolerance_pct == break_threshold_pct (default), this section
+                # never triggers because any penetration > tolerance would be a break.
 
                 # Check for trend reversal (price breaks above turning point)
                 if turning_point is not None and highs.iloc[i] > turning_point[1]:
@@ -257,26 +271,34 @@ class DowntrendLineBreak(Signal):
         return signal
 
     def _find_turning_point(
-        self, swing_highs: List[Tuple[int, float]], breakdown_bar: int
+        self, swing_highs: List[Tuple[int, float]], breakdown_bar: int, lookback: int
     ) -> Optional[Tuple[int, float]]:
         """
-        Find the turning point (highest swing high) before the breakdown.
+        Find the turning point (highest swing high) within lookback before breakdown.
 
-        The turning point is the highest swing high that occurred before
-        the downtrend was confirmed. This becomes Peak 1 for the trendline.
+        The turning point is the highest swing high that occurred within the
+        lookback window before the downtrend was confirmed. Using a lookback
+        window ensures we use the swing high from the current pattern, not an
+        ancient high from much earlier price action.
 
         Args:
             swing_highs: List of (bar_idx, price) for all swing highs.
             breakdown_bar: Bar index where downtrend was confirmed.
+            lookback: Maximum bars to look back from breakdown_bar.
 
         Returns:
-            (bar_idx, price) of highest swing high before breakdown, or None.
+            (bar_idx, price) of highest swing high in window, or None.
         """
-        # Filter swing highs before breakdown
-        candidates = [(idx, price) for idx, price in swing_highs if idx < breakdown_bar]
+        # Filter swing highs within lookback window before breakdown
+        earliest_bar = max(0, breakdown_bar - lookback)
+        candidates = [
+            (idx, price)
+            for idx, price in swing_highs
+            if earliest_bar <= idx < breakdown_bar
+        ]
 
         if not candidates:
             return None
 
-        # Return the highest
+        # Return the highest within the lookback window
         return max(candidates, key=lambda x: x[1])
